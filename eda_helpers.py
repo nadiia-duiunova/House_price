@@ -3,7 +3,7 @@ import numpy as np
 import scipy.stats as stats
 
 
-def normality_check(features: list, data:pd.DataFrame, data_info:pd.DataFrame) -> pd.DataFrame:
+def normality_check(data:pd.DataFrame, data_info:pd.DataFrame, features: list,) -> pd.DataFrame:
     """ Define if the numerical feature is distributed normally
 
     Args:
