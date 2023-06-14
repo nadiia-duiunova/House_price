@@ -1,8 +1,0 @@
-,data_type,missing values,distribution,n outliers
-Price,continuous,3,right_skewed,0
-Address,text,0,not applicable,0
-Zip,text,0,not applicable,0
-Area,continuous,0,right_skewed,0
-Room,descrete,0,right_skewed,0
-Lon,continuous,0,normal,3
-Lat,continuous,0,heavy_tailed,3
