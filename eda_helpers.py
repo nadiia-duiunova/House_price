@@ -67,10 +67,12 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                 outlier_border = Q3 + 1.5*IQR
 
                 outliers = data[data[i]>outlier_border]
-                print(f'o {outliers.shape[0]} datapoints with {i} > {outlier_border}')
-
-                if show_details:
-                    display(outliers)
+                if outliers.shape[0] > 0:
+                    print(f'o {outliers.shape[0]} datapoints with {i} > {outlier_border}')
+                    if show_details:
+                        display(outliers)
+                else:
+                    print(f'o No outliers in {i}')
 
             elif distribution == 'left_skewed':
                 for i in data.columns:
@@ -80,10 +82,12 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                     outlier_border = Q1 - 1.5*IQR
 
                     outliers = data[data[i]>outlier_border]
-                    print(f'o {outliers.shape[0]} datapoints with {i} > {outlier_border}')
-
-                    if show_details:
-                        display(outliers)
+                    if outliers.shape[0] > 0:
+                        print(f'o {outliers.shape[0]} datapoints with {i} > {outlier_border}')
+                        if show_details:
+                            display(outliers)
+                    else:
+                        print(f'o No outliers in {i}')
 
             elif (distribution == 'normal') or (distribution == 'heavy_tailed'):
                 
@@ -93,10 +97,12 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                 upper_threshold = mean + 3 * std
                 values_below_3std = data.loc[data[i] < lower_treshold, i].values
                 values_above_3std = data.loc[data[i] > upper_threshold, i].values
-                if values_below_3std.shape[0] >0:
+                if values_below_3std.shape[0]>0:
                     print(f'o {values_below_3std.shape[0]} datapoints with {i} < {lower_treshold}')
                 if values_above_3std.shape[0]>0:
                     print(f'o {values_above_3std.shape[0]} datapoints with {i} > {upper_threshold}')
+                if values_below_3std.shape[0] == 0 and values_above_3std.shape[0] == 0:
+                    print (f'o No outliers in {i}')
 
             
                 outliers_low = data[data[i]<lower_treshold]
