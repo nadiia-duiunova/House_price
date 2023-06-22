@@ -1,7 +1,10 @@
 import pandas as pd
+import numpy as np
 import scipy.stats as stats
 from sklearn.metrics import explained_variance_score, mean_squared_error, mean_absolute_error
 from itertools import combinations
+
+from sklearn.model_selection import cross_val_score, train_test_split
 
 
 def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> pd.DataFrame:
@@ -68,7 +71,7 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
 
 
 
-def evaluate_model(model_type: str, X_columns: list, target_name: str, y_true: list, y_pred: list, results: pd.DataFrame) :
+def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.DataFrame, cv: int = 5) :
     """Calculate RMSE, MAE, explained variation and correlation coeficient of predicted values and add the results to the 'results' dataframe
     Args:
         model_type: str
@@ -95,12 +98,39 @@ def evaluate_model(model_type: str, X_columns: list, target_name: str, y_true: l
             correlation between real and predicted value. The closer to 1, the better 
     """
     
-    RMSE = mean_squared_error(y_true, y_pred, squared=False)
-    MAE = mean_absolute_error(y_true, y_pred)
-    r_value = explained_variance_score(y_true, y_pred)
-    corr = stats.spearmanr(y_true, y_pred)[0]
+    model.fit(features, target)
+    r2_coef_determination = cross_val_score(model, features, target, cv=cv, scoring = 'r2')
+    r2_coef_determination = r2_coef_determination.mean()
 
-    new_row = [model_type, X_columns, target_name, RMSE, MAE, r_value, corr]
+    explained_variance = cross_val_score(model, features, target, cv=cv, scoring = 'explained_variance')
+    explained_variance = explained_variance.mean()
+
+    rmses = []
+    maes = []
+    corrs = []
+    for _ in range(cv):
+
+        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=1/cv)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
+
+        # back transformation from log of price to price
+        y_true = np.exp(y_test)
+        y_pred = np.exp(y_pred)
+
+        RMSE = mean_squared_error(y_true, y_pred, squared=False)
+        MAE = mean_absolute_error(y_true, y_pred)
+        corr = stats.spearmanr(y_true, y_pred)[0]
+
+        rmses.append(RMSE)
+        maes.append(MAE)
+        corrs.append(corr)
+
+    RMSE = int(np.mean(rmses))
+    MAE = int(np.mean(maes))
+    corr = round(np.mean(corrs), 4)
+
+    new_row = [model, cv, list(features.columns), RMSE, MAE, r2_coef_determination, explained_variance, corr]
     results.loc[len(results)] = new_row
 
-    return RMSE, MAE, r_value, corr
+    return RMSE, MAE, r2_coef_determination, explained_variance, corr
