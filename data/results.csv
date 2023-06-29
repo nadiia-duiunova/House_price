@@ -1,3 +1,3 @@
 Model,N folds,List of used features,RMSE,MAE,r2_coef_determination,explained_variance,corr_coef
-LinearRegression(),4,"['log_Area', 'Manhattan_distance', 'District_Zuid-Oost', 'District_the rest']",270094,115773,0.8633621834993721,0.864726143885921,0.9183
-LinearRegression(),4,"['log_Area', 'Manhattan_distance', 'District_Nieuw-West', 'District_Noord', 'District_Oost', 'District_West', 'District_Zuid', 'District_Zuid-Oost']",188001,89830,0.8794592767009556,0.8818327532018244,0.9374
+LinearRegression(),4,"['log_Area', 'Manhattan_distance', 'District_Zuid-Oost', 'District_the rest']",286941,116868,0.8584396759736909,0.8598580449569994,0.9093
+LinearRegression(),4,"['log_Area', 'Manhattan_distance', 'District_Nieuw-West', 'District_Noord', 'District_Oost', 'District_West', 'District_Zuid', 'District_Zuid-Oost']",265134,104945,0.8765823302061113,0.8789645383064735,0.9262
