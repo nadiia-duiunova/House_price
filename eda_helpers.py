@@ -56,6 +56,8 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
         show_details: bool, optional. Defaults to False.
             print out the table with only those rows, that were marked as outliers
     """
+    outliers_info = pd.DataFrame(columns=['lower_threshold', 'upper_threshold', 'n_outliers'], index=features)
+
     for i in features:
         if data_info.loc[i, 'data_type'] in ['continuous', 'descrete']:
             distribution = data_info.loc[i, 'distribution']
@@ -71,8 +73,11 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                     print(f'o {outliers.shape[0]} datapoints with {i} > {outlier_border}')
                     if show_details:
                         display(outliers)
+                    outliers_info.loc[i, 'upper_threshold'] = outlier_border
+                    outliers_info.loc[i, 'n_outliers'] = outliers.shape[0]
                 else:
                     print(f'o No outliers in {i}')
+                    outliers_info.loc[i, 'n_outliers'] = 0
 
             elif distribution == 'left_skewed':
                 for i in data.columns:
@@ -86,8 +91,11 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                         print(f'o {outliers.shape[0]} datapoints with {i} > {outlier_border}')
                         if show_details:
                             display(outliers)
+                        outliers_info.loc[i, 'lower_threshold'] = outlier_border
+                        outliers_info.loc[i, 'n_outliers'] = outliers.shape[0]
                     else:
                         print(f'o No outliers in {i}')
+                        outliers_info.loc[i, 'n_outliers'] = 0
 
             elif (distribution == 'normal') or (distribution == 'heavy_tailed'):
                 
@@ -109,6 +117,10 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                 outliers_up = data[data[i]>upper_threshold]
                 outliers = pd.concat((outliers_low, outliers_up))
 
+                outliers_info.loc[i, 'lower_threshold'] = lower_treshold
+                outliers_info.loc[i, 'upper_threshold'] = upper_threshold
+                outliers_info.loc[i, 'n_outliers'] = outliers.shape[0]
+
                 if show_details:
                     display(outliers)
             else: 
@@ -116,3 +128,5 @@ def count_outliers(data:pd.DataFrame, data_info:pd.DataFrame, features: list, sh
                 
         else: 
             print(f'Impossible to define outliers for {i} data: data is not in [continuous, descrete]')
+
+    return outliers_info
