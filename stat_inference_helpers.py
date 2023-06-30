@@ -26,6 +26,7 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
              - stat-sign: bool. Significance theshold is p-value = 0.05, so 0.04 is significant, 0.06 - not.
              - N: number of observations in each feature.
     """
+    r_values = pd.DataFrame(1, columns=features, index=features)
     summary = pd.DataFrame()
     
     # create lists with normaly / not normaly distributed features
@@ -41,14 +42,18 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
     # create list of all possible combinations of features without repeats
     iterator = combinations(norm_features+no_norm_features, 2)
 
-    # get correlations between every pait of features and it's signifficance
+    # get correlations between eve of features and it's signifficance
     for col1, col2 in iterator:
         if col1 in norm_features and col2 in norm_features:
             r_value, p_value = stats.pearsonr(data.loc[:, col1], data.loc[:, col2])
             method = 'Pearson'
+            r_values.loc[col1, col2] = r_value
+            r_values.loc[col2, col1] = r_value
         else: 
             r_value, p_value = stats.spearmanr(data.loc[:, col1], data.loc[:, col2])
             method = 'Spearman'
+            r_values.loc[col1, col2] = r_value
+            r_values.loc[col2, col1] = r_value
         n = len(data)
 
         # Store output in dataframe format
@@ -67,7 +72,7 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
             ignore_index=True,
             sort=False,
         )
-    return summary
+    return summary, r_values
 
 
 
