@@ -3,6 +3,7 @@ import numpy as np
 import scipy.stats as stats
 from sklearn.metrics import explained_variance_score, mean_squared_error, mean_absolute_error
 from itertools import combinations
+import matplotlib.pyplot as plt
 
 from sklearn.model_selection import cross_val_score, train_test_split
 
@@ -139,3 +140,70 @@ def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.
     results.loc[len(results)] = new_row
 
     return RMSE, MAE, r2_coef_determination, explained_variance, corr
+
+
+
+def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_table: pd.DataFrame, plot: bool = True) -> pd.DataFrame:
+    
+    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ADD DOCSTRING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
+    
+    """_summary_
+
+    Args:
+        data (pd.DataFrame): _description_
+        grouping_var (list): _description_
+        feature (str): _description_
+        result_table (pd.DataFrame): _description_
+        plot (bool, optional): _description_. Defaults to True.
+
+    Returns:
+        pd.DataFrame: _description_
+    """
+        for col in grouping_var:
+
+        # check is variances are homogeneous
+        values_per_group = {
+            grp_label: values
+            for grp_label, values in data.groupby(col, observed=True)['Price']
+        }
+        
+        # create a list with lists of values
+        (levene, levene_p_value) = stats.levene(*values_per_group.values())
+        if levene_p_value >0.05:
+            variances = 'equal'
+        else:
+            variances = 'not_equal'
+
+        # normal ANOVA can be applied only when the variances are homogeneous
+        if variances == 'equal':
+            test_type = 'One way ANOVA'
+            (f_value, p_value) = stats.f_oneway(*values_per_group.values())
+        else:
+            test_type = 'Welch ANOVA'
+            welch_df = pg.welch_anova(dv = feature, between = col, data = data)
+            p_value = welch_df['p-unc']
+            f_value = welch_df['F']
+
+        dict_result = {
+            "test-type": test_type,
+            "feature": col,
+            "group-var": feature,
+            "f-value": round(f_value, 3),
+            "p-value": round(p_value, 5),
+            "stat-sign": (p_value < 0.05),
+            "variances": variances
+        }
+        df_result = pd.DataFrame(data=dict_result, index=[0])
+        result_table = pd.concat([result_table, df_result], ignore_index=True) 
+
+        # plot grouping var vs feature as boxplots
+        if plot:
+            boxplot, ax = plt.subplots(figsize = (15,4))
+            _ = sns.boxplot(ax=ax, x=data[col], y=data[feature])
+            _ = sns.swarmplot(
+                ax=ax, x=data[col], y= data[feature], color=".25", alpha=0.50, size=2
+            )
+            _ = ax.set_title(f"Boxplot {feature} across {col}")
+            plt.xticks(rotation=90)
+
+    return result_table
