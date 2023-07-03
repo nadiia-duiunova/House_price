@@ -4,8 +4,12 @@ import scipy.stats as stats
 from sklearn.metrics import explained_variance_score, mean_squared_error, mean_absolute_error
 from itertools import combinations
 import matplotlib.pyplot as plt
+import seaborn as sns
+import pingouin as pg
 
 from sklearn.model_selection import cross_val_score, train_test_split
+
+from eda_helpers import count_outliers
 
 
 def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> pd.DataFrame:
@@ -13,9 +17,11 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
 
     Args:
         data: pd.DataFrame
-            dataframe with features
+            dataframe to pick the features from
         data_info: pd.DataFrame
             dataframe with information about distribution of data features
+        features: list
+            list of features between which correlation analysis will be applied
 
     Returns:
         summary: pd.DataFrame: 
@@ -26,6 +32,8 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
              - p-value: how signifficant is that correlation. 
              - stat-sign: bool. Significance theshold is p-value = 0.05, so 0.04 is significant, 0.06 - not.
              - N: number of observations in each feature.
+        r-values: pd.DataFrame
+            correlation matrix (dataframe) of n features by n features size
     """
     r_values = pd.DataFrame(1, columns=features, index=features)
     summary = pd.DataFrame()
@@ -98,7 +106,9 @@ def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.
             root mean squared error. The less, the better
         MAE: float
             mean absolute error. The less, the better
-        r-value: float
+        r2_coef_determination: float
+            how well a statistical model predicts an outcome. The closer to 1, the better 
+        r-explained_variance: float
             proportion of explained variance. The closer to 1, the better 
         corr: float
             correlation between real and predicted value. The closer to 1, the better 
@@ -144,22 +154,32 @@ def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.
 
 
 def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_table: pd.DataFrame, plot: bool = True) -> pd.DataFrame:
-    
-    # !!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!ADD DOCSTRING!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!
-    
-    """_summary_
+    """ Runs anova analysis for a list of nominal features, grouped by another feature
 
     Args:
-        data (pd.DataFrame): _description_
-        grouping_var (list): _description_
-        feature (str): _description_
-        result_table (pd.DataFrame): _description_
-        plot (bool, optional): _description_. Defaults to True.
+        data: pd.DataFrame
+            dataframe to pick the features from
+        grouping_var: list
+            list of feature, on which anova will be conducted
+        feature: str
+            variable to group features by
+        result_table: pd.DataFrame
+            dataFrame to put the results in
+        plot: bool, optional
+            plot the results as a boxplot. Defaults to True.
 
     Returns:
-        pd.DataFrame: _description_
+        result_table: pd.DataFrame
+            table with the folloving data:
+            - test-type: 'One way ANOVA' or 'Welch ANOVA'
+            - feature: name of the feature, on which the anova was conducted
+            - group-var: different feature, by which the previous one was groupped (always the same)
+            - f-value: the ratio of explained variance to unexplained variance
+            - p-value: determines if the difference between group means is statistically significant
+            - stat-sign: True, if p-value is less than 0.05. Otherwise False
+            - variances: equal or no_equal. Determined by levene test.
     """
-        for col in grouping_var:
+    for col in grouping_var:
 
         # check is variances are homogeneous
         values_per_group = {
@@ -168,7 +188,7 @@ def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_ta
         }
         
         # create a list with lists of values
-        (levene, levene_p_value) = stats.levene(*values_per_group.values())
+        (_, levene_p_value) = stats.levene(*values_per_group.values())
         if levene_p_value >0.05:
             variances = 'equal'
         else:
@@ -198,7 +218,7 @@ def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_ta
 
         # plot grouping var vs feature as boxplots
         if plot:
-            boxplot, ax = plt.subplots(figsize = (15,4))
+            _, ax = plt.subplots(figsize = (15,4))
             _ = sns.boxplot(ax=ax, x=data[col], y=data[feature])
             _ = sns.swarmplot(
                 ax=ax, x=data[col], y= data[feature], color=".25", alpha=0.50, size=2
@@ -207,3 +227,45 @@ def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_ta
             plt.xticks(rotation=90)
 
     return result_table
+
+
+def show_outliers_importance (data: pd.DataFrame, data_info: pd.DataFrame, target_feature: str, corr_feature_list: list):
+    """Calculates delta of correlations between features with and without outliers. Prots the results as a heatmap.
+
+    Args:
+        data: pd.DataFrame
+            dataframe to pick the features from
+        data_info: pd.DataFrame
+            dataframe with information about distribution of data features
+        target_feature: str
+            name of target feature, from which the outliers shoud be removed
+        corr_feature_list: list 
+            list of names of features, that will be checked for correlation with target
+    """
+
+    # 1. identify the outliers and their borders
+    feature_outliers = count_outliers(data = data, data_info = data_info, features = [target_feature])
+    lower_threshold = feature_outliers.loc[target_feature, 'lower_threshold']
+    upper_threshold = feature_outliers.loc[target_feature, 'upper_threshold']
+
+    corr_feature_list.append(target_feature)
+    
+    # 2. create a corr matrix with features of interest and target with outliers
+    _, corr_with_outliers  = custom_corr(data, data_info, corr_feature_list)
+
+    # 3. remove all outliers and leverage points of feature
+    no_outliers_df = data.copy()
+    if lower_threshold is not np.NaN:
+        no_outliers_df.drop(no_outliers_df.loc[no_outliers_df[target_feature]<lower_threshold].index, inplace = True)
+    if upper_threshold is not np.NaN:
+        no_outliers_df.drop(no_outliers_df.loc[no_outliers_df[target_feature]>upper_threshold].index, inplace = True)
+
+    # 4. create new corr matrix
+    _, corr_without_outliers = custom_corr(no_outliers_df, data_info, corr_feature_list)
+
+    # 5. calculate the delta of 2 matrixes to define if the outliers are influential
+    delta_corr = corr_without_outliers- corr_with_outliers
+
+    # 6. plot delta correlations
+    mask=np.triu(np.ones_like(delta_corr, dtype=bool))
+    heatmap = sns.heatmap(delta_corr, mask=mask, vmin=-1, vmax=1, annot=True, cmap='BrBG')
