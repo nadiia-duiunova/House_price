@@ -6,7 +6,7 @@ from itertools import combinations
 import matplotlib.pyplot as plt
 import seaborn as sns
 import pingouin as pg
-
+from statsmodels.stats.outliers_influence import variance_inflation_factor
 from sklearn.model_selection import cross_val_score, train_test_split
 
 from eda_helpers import count_outliers
@@ -85,71 +85,46 @@ def custom_corr(data: pd.DataFrame, data_info: pd.DataFrame, features: list) -> 
 
 
 
-def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.DataFrame, cv: int = 5) :
-    """Calculate RMSE, MAE, explained variation and correlation coeficient of predicted values and add the results to the 'results' dataframe
+def show_outliers_importance (data: pd.DataFrame, data_info: pd.DataFrame, target_feature: str, corr_feature_list: list):
+    """Calculates delta of correlations between features with and without outliers. Prots the results as a heatmap.
+
     Args:
-        model_type: str
-            e.g. Logostic regression, Linear regression, etc.
-        X_columns: list
-            list of features, used in model
-        target_name: str
-            name of predicted variable, that was used in model, e.g. log(Price) or Price
-        y_true: list
-            list of true target values
-        y_pred: list. 
-            list of predicted target values
-        results: pd.DataFrame
-            table, where the row with evaluations will be added
-
-    Returns:
-        RMSE: float
-            root mean squared error. The less, the better
-        MAE: float
-            mean absolute error. The less, the better
-        r2_coef_determination: float
-            how well a statistical model predicts an outcome. The closer to 1, the better 
-        r-explained_variance: float
-            proportion of explained variance. The closer to 1, the better 
-        corr: float
-            correlation between real and predicted value. The closer to 1, the better 
+        data: pd.DataFrame
+            dataframe to pick the features from
+        data_info: pd.DataFrame
+            dataframe with information about distribution of data features
+        target_feature: str
+            name of target feature, from which the outliers shoud be removed
+        corr_feature_list: list 
+            list of names of features, that will be checked for correlation with target
     """
+
+    # 1. identify the outliers and their borders
+    feature_outliers = count_outliers(data = data, data_info = data_info, features = [target_feature])
+    lower_threshold = feature_outliers.loc[target_feature, 'lower_threshold']
+    upper_threshold = feature_outliers.loc[target_feature, 'upper_threshold']
+
+    corr_feature_list.append(target_feature)
     
-    model.fit(features, target)
-    r2_coef_determination = cross_val_score(model, features, target, cv=cv, scoring = 'r2')
-    r2_coef_determination = r2_coef_determination.mean()
+    # 2. create a corr matrix with features of interest and target with outliers
+    _, corr_with_outliers  = custom_corr(data, data_info, corr_feature_list)
 
-    explained_variance = cross_val_score(model, features, target, cv=cv, scoring = 'explained_variance')
-    explained_variance = explained_variance.mean()
+    # 3. remove all outliers and leverage points of feature
+    no_outliers_df = data.copy()
+    if lower_threshold is not np.NaN:
+        no_outliers_df.drop(no_outliers_df.loc[no_outliers_df[target_feature]<lower_threshold].index, inplace = True)
+    if upper_threshold is not np.NaN:
+        no_outliers_df.drop(no_outliers_df.loc[no_outliers_df[target_feature]>upper_threshold].index, inplace = True)
 
-    rmses = []
-    maes = []
-    corrs = []
-    for _ in range(cv):
+    # 4. create new corr matrix
+    _, corr_without_outliers = custom_corr(no_outliers_df, data_info, corr_feature_list)
 
-        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=1/cv)
-        model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+    # 5. calculate the delta of 2 matrixes to define if the outliers are influential
+    delta_corr = corr_without_outliers- corr_with_outliers
 
-        # back transformation from log of price to price
-        y_true = np.exp(y_test)
-        y_pred = np.exp(y_pred)
-
-        RMSE = mean_squared_error(y_true, y_pred, squared=False)
-        MAE = mean_absolute_error(y_true, y_pred)
-        corr = stats.spearmanr(y_true, y_pred)[0]
-
-        rmses.append(RMSE)
-        maes.append(MAE)
-        corrs.append(corr)
-
-    RMSE = int(np.mean(rmses))
-    MAE = int(np.mean(maes))
-    corr = round(np.mean(corrs), 4)
-
-    new_row = [model, cv, list(features.columns), RMSE, MAE, r2_coef_determination, explained_variance, corr]
-    results.loc[len(results)] = new_row
-
-    return RMSE, MAE, r2_coef_determination, explained_variance, corr
+    # 6. plot delta correlations
+    mask=np.triu(np.ones_like(delta_corr, dtype=bool))
+    heatmap = sns.heatmap(delta_corr, mask=mask, vmin=-1, vmax=1, annot=True, cmap='BrBG')
 
 
 
@@ -229,43 +204,68 @@ def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_ta
     return result_table
 
 
-def show_outliers_importance (data: pd.DataFrame, data_info: pd.DataFrame, target_feature: str, corr_feature_list: list):
-    """Calculates delta of correlations between features with and without outliers. Prots the results as a heatmap.
 
+def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.DataFrame, cv: int = 5) :
+    """Calculate RMSE, MAE, explained variation and correlation coeficient of predicted values and add the results to the 'results' dataframe
     Args:
-        data: pd.DataFrame
-            dataframe to pick the features from
-        data_info: pd.DataFrame
-            dataframe with information about distribution of data features
-        target_feature: str
-            name of target feature, from which the outliers shoud be removed
-        corr_feature_list: list 
-            list of names of features, that will be checked for correlation with target
+        model:
+            sklearn object, e.g. LogisticRegression, LinearRegression, etc.
+        features: pd.DataFrame
+            pd.DataFrame of features, used in model (X)
+        target: np.array
+            array of target values
+        results: pd.DataFrame
+            table, where the row with evaluations will be added
+        cv: int
+            number of folds for cross-validation. Deafualts to 5.
+
+    Returns:
+        RMSE: float
+            root mean squared error. The less, the better
+        MAE: float
+            mean absolute error. The less, the better
+        r2_coef_determination: float
+            how well a statistical model predicts an outcome. The closer to 1, the better 
+        r-explained_variance: float
+            proportion of explained variance. The closer to 1, the better 
+        corr: float
+            correlation between real and predicted value. The closer to 1, the better 
     """
-
-    # 1. identify the outliers and their borders
-    feature_outliers = count_outliers(data = data, data_info = data_info, features = [target_feature])
-    lower_threshold = feature_outliers.loc[target_feature, 'lower_threshold']
-    upper_threshold = feature_outliers.loc[target_feature, 'upper_threshold']
-
-    corr_feature_list.append(target_feature)
     
-    # 2. create a corr matrix with features of interest and target with outliers
-    _, corr_with_outliers  = custom_corr(data, data_info, corr_feature_list)
+    model.fit(features, target)
+    r2_coef_determination = cross_val_score(model, features, target, cv=cv, scoring = 'r2')
+    r2_coef_determination = r2_coef_determination.mean()
 
-    # 3. remove all outliers and leverage points of feature
-    no_outliers_df = data.copy()
-    if lower_threshold is not np.NaN:
-        no_outliers_df.drop(no_outliers_df.loc[no_outliers_df[target_feature]<lower_threshold].index, inplace = True)
-    if upper_threshold is not np.NaN:
-        no_outliers_df.drop(no_outliers_df.loc[no_outliers_df[target_feature]>upper_threshold].index, inplace = True)
+    explained_variance = cross_val_score(model, features, target, cv=cv, scoring = 'explained_variance')
+    explained_variance = explained_variance.mean()
 
-    # 4. create new corr matrix
-    _, corr_without_outliers = custom_corr(no_outliers_df, data_info, corr_feature_list)
+    rmses = []
+    maes = []
+    corrs = []
+    
+    for _ in range(cv):
+        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=1/cv)
+        model.fit(X_train, y_train)
+        y_pred = model.predict(X_test)
 
-    # 5. calculate the delta of 2 matrixes to define if the outliers are influential
-    delta_corr = corr_without_outliers- corr_with_outliers
+        # back transformation from log of price to price
+        y_true = np.exp(y_test)
+        y_pred = np.exp(y_pred)
 
-    # 6. plot delta correlations
-    mask=np.triu(np.ones_like(delta_corr, dtype=bool))
-    heatmap = sns.heatmap(delta_corr, mask=mask, vmin=-1, vmax=1, annot=True, cmap='BrBG')
+        RMSE = mean_squared_error(y_true, y_pred, squared=False)
+        MAE = mean_absolute_error(y_true, y_pred)
+        corr = stats.spearmanr(y_true, y_pred)[0]
+
+        rmses.append(RMSE)
+        maes.append(MAE)
+        corrs.append(corr)
+
+    RMSE = int(np.mean(rmses))
+    MAE = int(np.mean(maes))
+    corr = round(np.mean(corrs), 4)
+    vifs = [round(variance_inflation_factor(features.values, i), 2) for i in range(len(features.columns))]
+
+    new_row = [model, cv, list(features.columns), RMSE, MAE, r2_coef_determination, explained_variance, corr, vifs]
+    results.loc[len(results)] = new_row
+
+    return RMSE, MAE, r2_coef_determination, explained_variance, corr
