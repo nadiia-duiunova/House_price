@@ -1,7 +1,8 @@
 import pandas as pd
 import numpy as np
 import scipy.stats as stats
-from sklearn.metrics import explained_variance_score, mean_squared_error, mean_absolute_error
+from sklearn.metrics import r2_score, explained_variance_score, mean_squared_error, mean_absolute_error
+
 from itertools import combinations
 import matplotlib.pyplot as plt
 import seaborn as sns
@@ -205,14 +206,14 @@ def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_ta
 
 
 
-def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.DataFrame, cv: int = 5) :
-    """Calculate RMSE, MAE, explained variation and correlation coeficient of predicted values and add the results to the 'results' dataframe
+def evaluate_model(model, X: pd.DataFrame, y: np.array, results: pd.DataFrame, cv: int = 5) :
+    """Calculate RMSE, MAE, explained variation and correlation coeficient of predicted values for train and test sets, and add the results to the 'results' dataframe
     Args:
         model:
             sklearn object, e.g. LogisticRegression, LinearRegression, etc.
-        features: pd.DataFrame
+        X_train, X_valid: pd.DataFrame
             pd.DataFrame of features, used in model (X)
-        target: np.array
+        y_train, y_valid: np.array
             array of target values
         results: pd.DataFrame
             table, where the row with evaluations will be added
@@ -231,41 +232,54 @@ def evaluate_model(model, features: pd.DataFrame, target: np.array, results: pd.
         corr: float
             correlation between real and predicted value. The closer to 1, the better 
     """
-    
-    model.fit(features, target)
-    r2_coef_determination = cross_val_score(model, features, target, cv=cv, scoring = 'r2')
-    r2_coef_determination = r2_coef_determination.mean()
+    X_train, X_valid, y_train, y_valid = train_test_split(X, y, test_size=0.2, random_state=7)
 
-    explained_variance = cross_val_score(model, features, target, cv=cv, scoring = 'explained_variance')
-    explained_variance = explained_variance.mean()
+    model.fit(X_train, y_train)
+    y_valid_pred = model.predict(X_valid)
+    r2_train = cross_val_score(model, X_train, y_train, cv=cv, scoring = 'r2')
+    r2_train = r2_train.mean()
 
-    rmses = []
-    maes = []
-    corrs = []
-    
+    explained_variance_train = cross_val_score(model, X_train, y_train, cv=cv, scoring = 'explained_variance')
+    explained_variance_train = explained_variance_train.mean()
+
+    rmses_train = []
+    maes_train = []
+    corrs_train = []
+
     for _ in range(cv):
-        X_train, X_test, y_train, y_test = train_test_split(features, target, test_size=1/cv)
+        X_train, X_test, y_train, y_test = train_test_split(X_train, y_train, test_size=1/cv)
         model.fit(X_train, y_train)
-        y_pred = model.predict(X_test)
+        y_pred1 = model.predict(X_test)
 
         # back transformation from log of price to price
-        y_true = np.exp(y_test)
-        y_pred = np.exp(y_pred)
+        y_true1 = np.exp(y_test)
+        y_pred1 = np.exp(y_pred1)
 
-        RMSE = mean_squared_error(y_true, y_pred, squared=False)
-        MAE = mean_absolute_error(y_true, y_pred)
-        corr = stats.spearmanr(y_true, y_pred)[0]
+        RMSE = mean_squared_error(y_true1, y_pred1, squared=False)
+        MAE = mean_absolute_error(y_true1, y_pred1)
+        corr = stats.spearmanr(y_true1, y_pred1)[0]
 
-        rmses.append(RMSE)
-        maes.append(MAE)
-        corrs.append(corr)
+        rmses_train.append(RMSE)
+        maes_train.append(MAE)
+        corrs_train.append(corr)
 
-    RMSE = int(np.mean(rmses))
-    MAE = int(np.mean(maes))
-    corr = round(np.mean(corrs), 4)
-    vifs = [round(variance_inflation_factor(features.values, i), 2) for i in range(len(features.columns))]
+    RMSE_train = int(np.mean(rmses_train))
+    MAE_train = int(np.mean(maes_train))
+    corr_train = round(np.mean(corrs_train), 4)
+    vifs = [round(variance_inflation_factor(X_train.values, i), 2) for i in range(len(X_train.columns))]
+    
+    # perform all measures on validation set
 
-    new_row = [model, cv, list(features.columns), RMSE, MAE, r2_coef_determination, explained_variance, corr, vifs]
+    # back transformation from log of price to price
+    y_valid = np.exp(y_valid)
+    y_valid_pred = np.exp(y_valid_pred)
+
+    r2_valid = r2_score(y_valid, y_valid_pred)
+    explained_variance_valid = explained_variance_score(y_valid, y_valid_pred)
+    RMSE_valid = int(mean_squared_error(y_valid, y_valid_pred, squared=False))
+    MAE_valid = int(mean_absolute_error(y_valid, y_valid_pred))
+    corr_vlid = stats.spearmanr(y_valid, y_valid_pred)[0]
+
+    new_row = [model, list(X_train.columns), RMSE_train, RMSE_valid, MAE_train, MAE_valid, r2_train, r2_valid, explained_variance_train, explained_variance_valid, corr_train, corr_vlid, vifs]
     results.loc[len(results)] = new_row
 
-    return RMSE, MAE, r2_coef_determination, explained_variance, corr
