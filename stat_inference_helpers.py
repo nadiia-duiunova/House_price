@@ -1,5 +1,6 @@
 import pandas as pd
 import numpy as np
+from math import pi
 import scipy.stats as stats
 from sklearn.metrics import r2_score, explained_variance_score, mean_squared_error, mean_absolute_error
 
@@ -127,6 +128,64 @@ def show_outliers_importance (data: pd.DataFrame, data_info: pd.DataFrame, targe
     mask=np.triu(np.ones_like(delta_corr, dtype=bool))
     heatmap = sns.heatmap(delta_corr, mask=mask, vmin=-1, vmax=1, annot=True, cmap='BrBG')
 
+
+
+def distance_betw_2points(point_lat: float, center_lat: float, point_lon: float, center_lon: float, method: str = 'Euclidean') -> float:
+    """Calculate the distance between 2 poins on map with Euclidean, Manhattan or Haversine method
+
+    Args:
+        point_lat: float 
+            latitude of target point
+        center_lat: float  
+            latitude of center point
+        point_lon: float
+            longitude of target point
+        center_lon: float
+            longitude of center point
+        method: str, optional
+            name of calculation method. Possible values are 'Euclidean', 'Manhattan', 'Haversine'. Defaults to 'Euclidean'.
+
+    Returns:
+        distance: float
+            distance between 2 points
+    """
+    method = method.lower()
+
+    if method not in ['euclidean', 'manhattan', 'haversine']:
+        raise ValueError('Method not in [Euclidean, Manhattan, Haversine]')
+
+    if method == 'euclidean':
+        # formula tailored for distances on map
+        deglen = 110.25
+        x = center_lat - point_lat
+        y = (center_lon - point_lon) * np.cos(center_lon)
+        d = deglen * np.sqrt(x * x + y * y)
+
+        return d
+
+    elif method == 'haversine':
+    
+        # φ, λ in radians
+        center_lat = center_lat * pi/180
+        center_lon = center_lon * pi/180
+
+        point_lat = point_lat * pi/180
+        point_lon = point_lon * pi/180
+        delta_lat = np.abs(point_lat - center_lat)
+        delta_lon = np.abs(point_lon - center_lon)
+
+        R = 6371e3 # Earth radius in meters
+        a = np.square(np.sin(delta_lat/2)) + np.cos(point_lat) * np.cos(center_lat) * np.square(np.sin(delta_lon/2))
+        c = 2 * np.arctan2(np.sqrt(a), np.sqrt(1-a))
+        d = R * c
+
+        return d
+    
+    else:
+
+        d = np.abs(center_lat - point_lat) + np.abs(center_lon - point_lon)
+        return d  
+      
 
 
 def custom_anova(data: pd.DataFrame, grouping_var: list, feature: str, result_table: pd.DataFrame, plot: bool = True) -> pd.DataFrame:
